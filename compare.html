@@ -1,0 +1,325 @@
+<html>
+
+<head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Location Tracking and Compare</title>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+</head>
+
+<body>
+    <div id="map_canvas" style="float:left;width:100%;height:600px; display:none"></div>
+    <div id="floating-panel">
+        <b>Start: </b>
+        <select id="start">
+            <option value="IGI Airport, New Delhi, India" data-lat="28.556162" data-lng="77.099958">IGI Airport</option>
+
+        </select>
+        <b>End: </b>
+        <select id="end">
+            <option value="Pitampura, New Delhi, India" data-lat="28.698998" data-lng="77.138417">Pitampura</option>
+            <option value="Rohini Sec-9, New Delhi, India" data-lat="28.716895" data-lng="77.121370">Rohini Sec-9</option>
+            
+        </select>
+    </div>
+	<div id="floating-panel">
+        
+        <b> Another End: </b>
+        <select id="anotherend">
+            <option value="Pitampura, New Delhi, India" data-lat="28.698998" data-lng="77.138417">Pitampura</option>
+            <option value="Rohini Sec-9, New Delhi, India" data-lat="28.717" data-lng="77.121370">Rohini Sec-9</option>
+            
+        </select>
+    </div>
+    <div id="location-address" style="margin-top:40px"></div>
+    <ul style="display:none"></ul>
+    <script>
+        var directions = {};
+        $(document).ready(function() {
+            $("#end").change(function() {
+                $("#location-address").html('');
+                initMap();
+            });
+			$("#anotherend").change(function() {
+                $("#location-address").html('');
+                initMap();
+            });
+        });
+
+        function initMap() {
+            var OriLat = $("#start").find(':selected').attr('data-lat');
+            var OriLng = $("#start").find(':selected').attr('data-lng');
+            var desLat = $("#end").find(':selected').attr('data-lat');
+            var desLng = $("#end").find(':selected').attr('data-lng');
+			
+            var opts = {
+                zoom: 0,
+                mapTypeId: google.maps.MapTypeId.ROADMAP,
+                center: new google.maps.LatLng(OriLat, OriLng)
+            }
+
+            map = new google.maps.Map(document.getElementById("map_canvas"), opts);
+
+            var routes = [{
+                label: 'Airport',
+                request: {
+                    origin: new google.maps.LatLng(OriLat, OriLng),
+                    destination: new google.maps.LatLng(desLat, desLng),
+                    travelMode: google.maps.DirectionsTravelMode.DRIVING
+                },
+                rendering: {
+                    marker: {
+                        icon: 'http://labs.google.com/ridefinder/images/mm_20_blue.png'
+                    },
+                    draggable: true
+                }
+            }, ];
+            var bounds = new google.maps.LatLngBounds();
+
+            var dists = [200];
+            var selects = document.createElement('select');
+            list = document.getElementsByTagName('ul')[0];
+            for (var d = 0; d < dists.length; ++d) {
+                selects.options[selects.options.length] = new Option(dists[d], dists[d], d == 0, d == 0);
+            }
+
+            for (var r = 0; r < routes.length; ++r) {
+                bounds.extend(routes[r].request.destination);
+                routes[r].rendering.routeId = 'r' + r + new Date().getTime();
+                routes[r].rendering.dist = dists[0];
+                var select = selects.cloneNode(true);
+                select.setAttribute('name', routes[r].rendering.routeId);
+                select.onchange = function() {
+                    directions[this.name].renderer.dist = this.value;
+                    setMarkers(this.name)
+                };
+                list.appendChild(document.createElement('li'));
+                list.lastChild.appendChild(select);
+                list.lastChild.appendChild(document.createTextNode(routes[r].label));
+
+                requestRoute(routes[r], map);
+            }
+            map.fitBounds(bounds);
+        }
+
+
+        function setMarkers(ID) {
+            var direction = directions[ID],
+                renderer = direction.renderer,
+                dist = renderer.dist,
+                marker = renderer.marker,
+                map = renderer.getMap(),
+                dirs = direction.renderer.getDirections();
+            marker.map = map;
+            //alert(marker.map.lat());
+
+            for (var k in direction.sets) {
+
+                var set = directions[ID].sets[k];
+                set.visible = !!(k === dist);
+                for (var m = 0; m < set.length; ++m) {
+
+                    set[m].setMap((set.visible) ? map : null);
+                }
+            }
+            if (!direction.sets[dist]) {
+                if (dirs.routes.length) {
+                    var route = dirs.routes[0];
+                    var az = 0;
+                    for (var i = 0; i < route.legs.length; ++i) {
+                        if (route.legs[i].distance) {
+                            az += route.legs[i].distance.value;
+                        }
+
+                    }
+                    dist = Math.max(dist, Math.round(az / 100));
+                    direction.sets[dist] = gMilestone(route, dist, marker);
+
+                }
+            }
+        }
+
+        function requestRoute(route, map) {
+            if (!window.gDirSVC) {
+                window.gDirSVC = new google.maps.DirectionsService();
+            }
+
+            var renderer = new google.maps.DirectionsRenderer(route.rendering);
+            var renderer = new google.maps.DirectionsRenderer(route.rendering);
+            renderer.setMap(map);
+            renderer.setOptions({
+                preserveViewport: true
+            })
+
+
+            google.maps.event.addListener(renderer, 'directions_changed', function() {
+
+                if (directions[this.routeId]) {
+                    //remove markers
+                    for (var k in directions[this.routeId].sets) {
+                        for (var m = 0; m < directions[this.routeId].sets[k].length; ++m) {
+                            directions[this.routeId].sets[k][m].setMap(null);
+                        }
+                    }
+                }
+
+                directions[this.routeId] = {
+                    renderer: this,
+                    sets: {}
+                };
+                setMarkers(this.routeId);
+
+            });
+
+            window.gDirSVC.route(route.request, function(response, status) {
+                if (status == google.maps.DirectionsStatus.OK) {
+                    renderer.setDirections(response);
+                }
+            });
+        }
+        /** 
+         * creates markers along a google.maps.DirectionsRoute
+         *
+         * @param route object google.maps.DirectionsRoute
+         * @param dist  int    interval for milestones in meters
+         * @param opts  object google.maps.MarkerOptions
+         * @return array Array populated with created google.maps.Marker-objects
+         **/
+
+        function gMilestone(route, dist, opts) {
+			
+			var OnLat = floorFigure(parseFloat($("#anotherend").find(':selected').attr('data-lat')));
+            var OnLng = floorFigure(parseFloat($("#anotherend").find(':selected').attr('data-lng')));
+            
+			//alert(OnLat);
+			
+			var markers = [],
+                geo = google.maps.geometry.spherical,
+                path = route.overview_path,
+                point = path[0],
+                distance = 0,
+                leg,
+                overflow,
+                pos;
+
+            for (var p = 1; p < path.length; ++p) {
+                leg = Math.round(geo.computeDistanceBetween(point, path[p]));
+                d1 = distance + 0
+                distance += leg;
+                overflow = dist - (d1 % dist);
+
+                if (distance >= dist && leg >= overflow) {
+                    if (overflow && leg >= overflow) {
+                        pos = geo.computeOffset(point, overflow, geo.computeHeading(point, path[p]));
+                        opts.position = pos;
+                        markers.push(new google.maps.Marker(opts));
+                        distance -= dist;
+						alert(opts.position.lat());
+						var OnDesLat = floorFigure(opts.position.lat());
+						var OnDesLng = floorFigure(opts.position.lng());
+						
+						if(OnLat == OnDesLat){
+							//alert(opts.position.lat() + ", " + opts.position.lng());
+							getAddress(opts.position.lat(), opts.position.lng());
+						}
+
+                    }
+
+                    while (distance >= dist) {
+                        pos = geo.computeOffset(point, dist + overflow, geo.computeHeading(point, path[p]));
+                        opts.position = pos;
+                        markers.push(new google.maps.Marker(opts));
+                        distance -= dist;
+                        //alert(markers);
+                    }
+                }
+                point = path[p]
+
+            }
+            return markers;
+        }
+
+        ///////////// Address functions///////////////
+
+        function getAddress(StepLatitude, StepLongitude) {
+
+                var url = "http://maps.googleapis.com/maps/api/geocode/json?latlng=" + StepLatitude + "," + StepLongitude + "&sensor=false";
+                //alert(url);
+
+                jQuery.getJSON(url, function(json) {
+                    Address = Create_Address(json);
+                    if (Address != 0) {
+                        NewAddress = "Address - " + Address + "<br>";
+                    }
+                    $("#location-address").append(NewAddress);
+
+                });
+            }
+            /*
+             * Create an address out of the json
+             */
+        function Create_Address(json, callback) {
+            if (!check_status(json)) // If the json file's status is not ok, then return
+                return 0;
+            /*address['country'] = google_getCountry(json);
+            address['province'] = google_getProvince(json);
+            address['city'] = google_getCity(json);
+            address['street'] = google_getStreet(json);
+            address['postal_code'] = google_getPostalCode(json);
+            address['country_code'] = google_getCountryCode(json);
+            address['formatted_address'] = google_getAddress(json);*/
+            var Address = google_getAddress(json);
+            return Address;
+            callback();
+        }
+
+        /* 
+         * Check if the json data from Google Geo is valid
+         */
+        function check_status(json) {
+            if (json["status"] == "OK") return true;
+            return false;
+        }
+
+        /*
+         * Given Google Geocode json, return the value in the specified element of the array
+         */
+
+        function google_getCountry(json) {
+            return Find_Long_Name_Given_Type("country", json["results"][0]["address_components"], false);
+        }
+
+        function google_getProvince(json) {
+            return Find_Long_Name_Given_Type("administrative_area_level_1", json["results"][0]["address_components"], true);
+        }
+
+        function google_getCity(json) {
+            return Find_Long_Name_Given_Type("locality", json["results"][0]["address_components"], false);
+        }
+
+        function google_getStreet(json) {
+            return Find_Long_Name_Given_Type("street_number", json["results"][0]["address_components"], false) + ' ' + Find_Long_Name_Given_Type("route", json["results"][0]["address_components"], false);
+        }
+
+        function google_getPostalCode(json) {
+            return Find_Long_Name_Given_Type("postal_code", json["results"][0]["address_components"], false);
+        }
+
+        function google_getCountryCode(json) {
+            return Find_Long_Name_Given_Type("country", json["results"][0]["address_components"], true);
+        }
+
+        function google_getAddress(json) {
+            return json["results"][0]["formatted_address"];
+        }
+		//=====Getting upto 3 digit coordinates=======
+		function floorFigure(figure, decimals){
+			if (!decimals) decimals = 3;
+			var d = Math.pow(10,decimals);
+			return (parseInt(figure*d)/d).toFixed(decimals);
+		};
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBZpNS8NFjSBgMa1UH6GPBSAvgRm4enJlA">
+    </script>
+</body>
+</html>

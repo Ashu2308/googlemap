@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>GOMA</title>
+	<script src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <style>
+      #map-canvas {
+    width: auto;
+    height: 350px;
+}
+#info {
+    position: absolute;
+    font-family: arial, sans-serif;
+    font-size: 18px;
+    font-weight: bold;
+}
+    </style>
+  </head>
+<body onload="initialize()">
+    <h3>Drag or re-shape for coordinates to display below</h3>
+    <div id="map-canvas">
+    </div>
+    <div id="textLocation">
+    </div>
+	<div id="abc">asd</div>
+</body>
+<script>
+$(document).ready(function(){
+
+$("#abc").click(function(){
+	
+	route(28.134568, 77.12548542);
+});
+function route(FromPlace,ToPlace){
+
+    var directionsService = new google.maps.DirectionsService;
+     var request = {
+            origin: FromPlace,
+            destination: ToPlace,
+            travelMode: google.maps.DirectionsTravelMode.DRIVING
+        };
+    directionsService.route(request, function(response, status) {
+	
+        if (status == google.maps.DirectionsStatus.OK) 
+        {
+
+            directionsDisplay.setDirections(response);
+     for (var i = 0; i < response.routes[0].legs.length; i++) {
+             for (var j = 0; j < response.routes[0].legs[i].steps.length; j++) {
+                 if(j == response.routes[0].legs[i].steps.length-1){
+
+                    addressRoute = addressRoute+response.routes[0].legs[i].steps[j].end_point.lat()+","
+                      +response.routes[0].legs[i].steps[j].end_point.lng()+"";
+                    latitude = response.routes[0].legs[i].steps[j].end_point.lat();
+                    longitude = response.routes[0].legs[i].steps[j].end_point.lng();
+                    destinationDB = latitude +","+ longitude;
+                    }else{
+
+                    addressRoute = addressRoute+response.routes[0].legs[i].steps[j].end_point.lat()+","
+                      +response.routes[0].legs[i].steps[j].end_point.lng()+"|";
+
+                    }
+                 }
+            }   
+            document.getElementById("textLocation").innerHTML = addressRoute;
+        }
+		
+      });
+alert("here");	  
+   }
+   });
+</script>
+<script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBZpNS8NFjSBgMa1UH6GPBSAvgRm4enJlA&callback=initMap">
+    </script>
+</html>
